@@ -5,3 +5,6 @@ data/
 S010303-v2.*
 pitchframe
 build/
+pitchframe
+pulsebook
+.DS_Store
