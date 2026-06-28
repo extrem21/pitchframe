@@ -3,8 +3,7 @@ tvagg
 data/
 12302019.NASDAQ_ITCH50
 S010303-v2.*
-pitchframe
 build/
-pitchframe
 pulsebook
 .DS_Store
+/pitchframe
