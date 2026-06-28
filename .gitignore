@@ -2,7 +2,6 @@ tvagg
 *.gz
 data/
 12302019.NASDAQ_ITCH50
-*.gz
 S010303-v2.*
-pulsebook
 pitchframe
+build/
