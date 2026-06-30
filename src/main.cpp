@@ -146,7 +146,11 @@ int main(int argc, char* argv[]) {
             }
             case 'I': {
                 MsgNOII msg;
-                if (decode_noii(body, msg_len, msg) && msg.cross_type == 'C') {
+                // Locate codes > k_max_locate appear in the NOII stream. Without the
+                // bounds check, closing_ref[oob_locate] writes past the array into the
+                // adjacent closing_bid[] in BSS, corrupting unrelated symbols' stored bids.
+                if (decode_noii(body, msg_len, msg) && msg.cross_type == 'C'
+                        && msg.locate > 0 && msg.locate < k_max_locate) {
                     closing_ref[msg.locate] = msg.reference_price;
                     if (const OrderBook* book = books.get(msg.locate)) {
                         closing_bid[msg.locate] = book->best_bid();
