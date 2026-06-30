@@ -83,6 +83,25 @@ bool OrderBook::replace(uint64_t orig_ref, uint64_t new_ref,
     return true;
 }
 
+bool OrderBook::execute(uint64_t ref, uint32_t executed_shares) {
+    auto it = orders_.find(ref);
+    if (it == orders_.end()) return false;
+
+    Order& o = it->second;
+    uint32_t actual = std::min(executed_shares, o.shares);
+
+    PriceLevel& lv = level(o.side, o.price);
+    lv.total_shares -= actual;
+    o.shares        -= actual;
+    shares_traded_  += actual;
+
+    if (o.shares == 0) {
+        if (lv.order_count > 0) lv.order_count--;
+        orders_.erase(it);
+    }
+    return true;
+}
+
 uint32_t OrderBook::best_bid() const {
     uint32_t result = 0;
 

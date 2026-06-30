@@ -105,6 +105,38 @@ TEST(OrderBookTest, OutOfBandPriceUsesOverflow) {
     EXPECT_EQ(book.best_ask(), 0u);
 }
 
+TEST(OrderBookTest, ExecutePartialReducesSharesKeepsOrder) {
+    OrderBook book;
+    book.add(1, 'B', k_base, 100, k_loc);
+    EXPECT_TRUE(book.execute(1, 40));
+    EXPECT_EQ(book.best_bid(), k_base);   // level still non-empty
+    EXPECT_EQ(book.active_orders(), 1);   // order still exists
+    EXPECT_EQ(book.shares_traded(), 40u);
+}
+
+TEST(OrderBookTest, ExecuteFullyRemovesOrder) {
+    OrderBook book;
+    book.add(1, 'B', k_base, 100, k_loc);
+    EXPECT_TRUE(book.execute(1, 100));
+    EXPECT_EQ(book.best_bid(), 0u);
+    EXPECT_EQ(book.active_orders(), 0);
+    EXPECT_EQ(book.shares_traded(), 100u);
+}
+
+TEST(OrderBookTest, ExecuteUnknownRefReturnsFalse) {
+    OrderBook book;
+    EXPECT_FALSE(book.execute(99, 10));
+}
+
+TEST(OrderBookTest, SharesTradedAccumulatesAcrossExecutions) {
+    OrderBook book;
+    book.add(1, 'B', k_base,     100, k_loc);
+    book.add(2, 'S', k_base + 1, 200, k_loc);
+    book.execute(1, 50);
+    book.execute(2, 75);
+    EXPECT_EQ(book.shares_traded(), 125u);
+}
+
 TEST(OrderBookTest, BidAndAskBothTracked) {
     OrderBook book;
     book.add(1, 'B', k_base - 1, 100, k_loc);

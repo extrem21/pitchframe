@@ -15,6 +15,7 @@ endif()
 add_library(pitchframe_lib STATIC
     src/parser/itch_parser.cpp
     src/book/order_book.cpp
+    src/common/alloc_counter.cpp
 )
 target_include_directories(pitchframe_lib PUBLIC include)
 target_compile_options(pitchframe_lib PRIVATE
@@ -39,6 +40,17 @@ target_compile_options(pitchframe PRIVATE
 target_link_options(pitchframe PRIVATE
     $<$<CONFIG:Debug>:-fsanitize=address -fsanitize=undefined>
 )
+
+# ---------------------------------------------------------------------------
+# Heap allocation counter (debug / verification only)
+# cmake .. -DPITCHFRAME_COUNT_ALLOCS=ON   — enables global operator new override
+# Do NOT enable in the test or bench targets; GTest allocates freely.
+# ---------------------------------------------------------------------------
+option(PITCHFRAME_COUNT_ALLOCS "Enable heap allocation counter" OFF)
+if(PITCHFRAME_COUNT_ALLOCS)
+    target_compile_definitions(pitchframe_lib PUBLIC PITCHFRAME_COUNT_ALLOCS)
+    target_compile_definitions(pitchframe     PRIVATE PITCHFRAME_COUNT_ALLOCS)
+endif()
 
 # ---------------------------------------------------------------------------
 # Google Test via FetchContent

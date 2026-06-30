@@ -39,12 +39,15 @@ public:
     bool cancel (uint64_t ref, uint32_t cancelled_shares);
     bool remove (uint64_t ref);
     bool replace(uint64_t orig_ref, uint64_t new_ref, uint32_t new_shares, uint32_t new_price);
+    // Handles both E and C: reduces resting order shares; removes order if fully filled.
+    bool execute(uint64_t ref, uint32_t executed_shares);
 
     // Returns 0 when the relevant side is empty.
     uint32_t best_bid() const;
     uint32_t best_ask() const;
 
-    int active_orders() const { return static_cast<int>(orders_.size()); }
+    int      active_orders()  const { return static_cast<int>(orders_.size()); }
+    uint64_t shares_traded()  const { return shares_traded_; }
 
 private:
     std::unordered_map<uint64_t, Order> orders_;
@@ -57,6 +60,8 @@ private:
 
     std::map<uint32_t, PriceLevel> bid_overflow_;
     std::map<uint32_t, PriceLevel> ask_overflow_;
+
+    uint64_t shares_traded_ = 0;
 
     bool        in_band         (uint32_t price) const;
     int         price_to_idx    (uint32_t price) const;
