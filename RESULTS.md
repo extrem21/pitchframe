@@ -150,3 +150,106 @@ Root cause: `std::unordered_map::emplace` allocates one linked-list node per
 Add Order. 121M allocs ≈ 117M A messages + 4M F messages — confirms one
 allocation per order insertion.
 Fix: replace with open-addressing flat hash map backed by pre-allocated arena.
+
+---
+
+## Google Benchmark results (Benchmarking milestone)
+
+Build: clang++ -std=c++17 -O2 -fno-rtti -fno-exceptions (Release, CMake)
+Tool: Google Benchmark v1.8.3
+Hardware: Apple M2 Air, 8GB RAM
+
+### Methodology
+
+All book-op benchmarks pre-populate with **27,000 resting orders** at AAPL-scale
+prices (k_aapl_price = $291.63) before any measurement starts. A benchmark on an
+empty book measures the wrong thing: hash map load factor and cache pressure are
+completely different from real trading-hours state. AAPL had 27,106 active orders
+at end of market hours on this replay day — that number is the warm state.
+
+Per-operation latency is amortised over millions of iterations (one timer call
+wraps the entire loop; no per-call timing). Timing a single ~5 ns operation with
+a timer whose overhead is 20–40 ns would give a measurement error of 400–800%.
+
+BM_FullReplay streams the 7.7 GB file from disk (I/O included in timing) because
+the file exceeds available RAM. All other benchmarks operate on in-memory state.
+
+### Parse latency
+
+| Benchmark        | CPU time | Throughput    |
+|------------------|----------|---------------|
+| BM_ParseAddOrder | 0.71 ns  | 1.43 G msg/s  |
+
+Measures `decode_add_order`: 4× (memcpy + bswap), all fields from a single
+64-byte cache line. Anti-optimization discipline:
+- `DoNotOptimize(msg_buf)` inside the loop — prevents constant-folding of reads
+  from the buffer across iterations (marks all memory as potentially modified)
+- `DoNotOptimize(out)` — marks the output struct as both read and written,
+  preventing elimination of stores to it
+- `ClobberMemory()` — explicit full memory barrier; no stores can be hoisted
+  out of the loop
+
+The 0.71 ns is consistent with ~4–6 bswap+memcpy operations executing in
+parallel on the M2's wide OOO backend with all data in L1.
+
+### Order book operation latency (warm 27K-order book)
+
+| Benchmark             | CPU time | Notes |
+|-----------------------|----------|-------|
+| BM_BookAdd            | 44.8 ns  | `unordered_map::emplace` (malloc) + price-array update |
+| BM_BookAdd_StdMap     | 43.2 ns  | Same add, std::map price levels — **no meaningful delta** (see below) |
+| BM_BookCancel         |  4.4 ns  | Map find + shares update; no alloc/free — common fast path |
+| BM_BookCancel_StdMap  |  9.2 ns  | Same cancel, std::map price levels — **2.1× slower** |
+| BM_BookExecute        |  4.4 ns  | Partial fill path; same cost as cancel |
+| BM_BookReplace        | 31.5 ns  | Remove + add; **hot-allocator path** — frees the node allocated one iteration ago, allocator recycles from per-thread free list |
+| BM_BookDelete         |  602 ns  | **Cold-allocator path** — rotates through 27K long-lived nodes; `operator delete` on a stale node is slow on macOS malloc. On Linux/glibc ~5–10× lower. Root cause: `std::unordered_map` heap-allocates every order. |
+
+**Why BM_BookAdd_StdMap shows no delta:** `add()` calls `unordered_map::emplace`
+which dominates at ~40 ns (a malloc). The price-level update — array index
+(~1 ns) vs std::map traversal (~5 ns) — is hidden in that noise. Both versions
+pay the same malloc cost so the A/B is inconclusive for add.
+
+**Why BM_BookCancel_StdMap shows a clear 2.1× delta:** `cancel()` makes no
+heap allocation. With malloc removed from the picture, the price-level access
+cost is the *only* difference. Array: one arithmetic index computation, direct
+load into L1. std::map: O(log 100) ≈ 7 pointer-chasing comparisons through
+scattered tree nodes. The 4.8 ns gap (9.2 − 4.4) is the empirical cache-miss
+cost of tree traversal versus direct array indexing on this hardware.
+
+This is the concrete evidence for the array choice. CLAUDE.md states "tree nodes
+are scattered in memory, every operation is a pointer-chase that's likely a cache
+miss" — BM_BookCancel_StdMap puts a number on it.
+
+**BM_BookDelete / BM_BookReplace gap:** both call `erase` → `operator delete`,
+but replace always frees the node allocated one iteration earlier (hot in the
+per-thread free list) while delete rotates through 27K stale nodes. The 19× gap
+(602 vs 32 ns) isolates allocator state, not data structure choice. A
+pre-allocated flat hash map eliminates this entirely.
+
+### Full replay throughput (streaming, I/O included)
+
+| Metric      | Value    |
+|-------------|----------|
+| Messages    | 268,744,780 |
+| Wall time   | 151.6 s  |
+| CPU time    | 148.3 s  |
+| Throughput  | 1.81 M msg/s |
+| Thread count | 1       |
+
+Handles all book-mutating message types (A, F, X, D, U, E, C) plus R for symbol
+table. Compare with the Milestone 3 baseline (2.48 M msg/s): that run did not
+handle E/C, so each message required less work. The current number is the correct
+baseline for the complete implementation.
+
+I/O is included because the 7.7 GB file exceeds the 8 GB RAM of this machine.
+CPU time (148.3 s) is lower than wall time (151.6 s) because some time is spent
+waiting on fread — the delta (3.3 s) represents kernel I/O scheduling.
+
+**Known bottleneck:** the benchmark numbers cannot be directly multiplied to
+account for the 148.3 s replay cost. The benchmarks measure a single warm book
+(27K orders, everything in L1/L2); the real replay spans 8,191 distinct books
+whose working set is far larger than L2, so cache miss pressure dominates. What
+the allocation counter (121M allocs) and BM_BookDelete (602 ns on macOS malloc)
+tell us is that every order insertion and deletion incurs heap overhead that a
+pre-allocated flat hash map would eliminate. The flat hash map is the primary
+next-step optimisation.

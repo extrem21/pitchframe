@@ -23,9 +23,9 @@ namespace pitchframe {
 //   but rare, so amortised cost is fine. Raise this tradeoff in interviews
 //   before the interviewer asks.
 //
-// best_bid / best_ask scan the array O(k_array_size) and check the overflow map.
-// This is acceptable for the correctness milestone and will be replaced with
-// tracked-index O(1) maintenance before the benchmarking milestone.
+// best_bid / best_ask are maintained as tracked values, updated on every
+// mutation. A rescan (O(k_array_size)) only fires when the best-price level
+// drains to zero shares — rare in normal trading, negligible amortised cost.
 class OrderBook {
 public:
     static constexpr int k_half_band  = 2048;
@@ -63,10 +63,18 @@ private:
 
     uint64_t shares_traded_ = 0;
 
-    bool        in_band         (uint32_t price) const;
-    int         price_to_idx    (uint32_t price) const;
-    PriceLevel& level           (char side, uint32_t price);
-    void        remove_from_level(const Order& o);
+    // Tracked best prices — updated on every add; rescanned only when the best
+    // level drains. 0 means the relevant side is empty.
+    uint32_t best_bid_ = 0;
+    uint32_t best_ask_ = 0;
+
+    bool        in_band          (uint32_t price) const;
+    int         price_to_idx     (uint32_t price) const;
+    PriceLevel& level            (char side, uint32_t price);
+    // Returns true if the level's total_shares hit zero after the removal.
+    bool        remove_from_level(const Order& o);
+    void        rescan_best_bid  ();
+    void        rescan_best_ask  ();
 };
 
 } // namespace pitchframe

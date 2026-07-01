@@ -64,6 +64,18 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# ---------------------------------------------------------------------------
+# Google Benchmark via FetchContent
+# ---------------------------------------------------------------------------
+FetchContent_Declare(
+    googlebenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG        v1.8.3
+)
+set(BENCHMARK_ENABLE_TESTING     OFF CACHE BOOL "" FORCE)
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googlebenchmark)
+
 enable_testing()
 
 add_executable(pitchframe_tests
@@ -77,10 +89,10 @@ include(GoogleTest)
 gtest_discover_tests(pitchframe_tests)
 
 # ---------------------------------------------------------------------------
-# itch_bench — benchmark stub (Google Benchmark wired up in a later milestone)
+# itch_bench — Google Benchmark suite
 # ---------------------------------------------------------------------------
 add_executable(itch_bench bench/itch_bench.cpp)
-target_link_libraries(itch_bench PRIVATE pitchframe_lib)
+target_link_libraries(itch_bench PRIVATE pitchframe_lib benchmark::benchmark)
 target_compile_options(itch_bench PRIVATE
     -Wall -Wextra -Wshadow -fno-rtti -fno-exceptions
     $<$<CONFIG:Release>:-O2>
