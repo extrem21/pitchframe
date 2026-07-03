@@ -16,6 +16,7 @@ add_library(pitchframe_lib STATIC
     src/parser/itch_parser.cpp
     src/book/order_book.cpp
     src/common/alloc_counter.cpp
+    src/net/sequence_tracker.cpp
 )
 target_include_directories(pitchframe_lib PUBLIC include)
 target_compile_options(pitchframe_lib PRIVATE
@@ -39,6 +40,30 @@ target_compile_options(pitchframe PRIVATE
 )
 target_link_options(pitchframe PRIVATE
     $<$<CONFIG:Debug>:-fsanitize=address -fsanitize=undefined>
+)
+
+# ---------------------------------------------------------------------------
+# Stage 2 — net binaries (udp_replayer, retrans_server, pitchframe_net)
+# ---------------------------------------------------------------------------
+add_executable(udp_replayer src/net/udp_replayer.cpp)
+target_link_libraries(udp_replayer PRIVATE pitchframe_lib)
+target_compile_options(udp_replayer PRIVATE
+    -Wall -Wextra -Wshadow -fno-rtti -fno-exceptions
+    $<$<CONFIG:Release>:-O2>
+)
+
+add_executable(pitchframe_net src/net/udp_receiver.cpp)
+target_link_libraries(pitchframe_net PRIVATE pitchframe_lib)
+target_compile_options(pitchframe_net PRIVATE
+    -Wall -Wextra -Wshadow -fno-rtti -fno-exceptions
+    $<$<CONFIG:Release>:-O2>
+)
+
+add_executable(retrans_server src/net/retrans_server.cpp)
+target_link_libraries(retrans_server PRIVATE pitchframe_lib)
+target_compile_options(retrans_server PRIVATE
+    -Wall -Wextra -Wshadow -fno-rtti -fno-exceptions
+    $<$<CONFIG:Release>:-O2>
 )
 
 # ---------------------------------------------------------------------------
@@ -81,9 +106,16 @@ enable_testing()
 add_executable(pitchframe_tests
     tests/parser_test.cpp
     tests/book_test.cpp
+    tests/net_test.cpp
 )
 target_link_libraries(pitchframe_tests PRIVATE pitchframe_lib GTest::gtest_main)
 target_compile_options(pitchframe_tests PRIVATE -Wall -Wextra -Wshadow)
+# Run A/B correctness test spawns the real net binaries as subprocesses; give
+# it an absolute path so it works regardless of ctest's working directory.
+target_compile_definitions(pitchframe_tests PRIVATE
+    PITCHFRAME_BUILD_DIR="${CMAKE_BINARY_DIR}"
+)
+add_dependencies(pitchframe_tests udp_replayer retrans_server pitchframe_net)
 
 include(GoogleTest)
 gtest_discover_tests(pitchframe_tests)

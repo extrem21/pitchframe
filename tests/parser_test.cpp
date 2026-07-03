@@ -24,7 +24,7 @@ TEST(SymbolTableTest, FullEightCharSymbol) {
     SymbolTable st;
     const uint8_t sym8[8] = {'B','R','K','A','L','O','N','G'};
     st.insert(5, sym8);
-    EXPECT_STREQ(st.lookup(5), "BRKALONE");
+    EXPECT_STREQ(st.lookup(5), "BRKALONG");
 }
 
 TEST(SymbolTableTest, LocateZeroIgnored) {
