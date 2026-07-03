@@ -5,7 +5,7 @@ found inside real HFT firms. Receives raw binary ITCH 5.0 messages, decodes them
 a per-symbol limit order book in real time. Correctness is verified against NASDAQ's own
 in-stream data — not synthetic test cases.
 
-Portfolio project targeting HFT-adjacent SWE roles. Every design decision is defensible under
+Portfolio project targeting low latency systems adjacent SWE roles. Every design decision is defensible under
 technical questioning; simplifications are documented honestly.
 
 ---
